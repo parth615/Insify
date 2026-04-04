@@ -11,7 +11,7 @@ import { useRouter, Tabs } from 'expo-router';
 WebBrowser.maybeCompleteAuthSession();
 
 const SPOTIFY_CLIENT_ID = '26da15706e304db08c3b7ae991943759';
-const API_BASE_URL = '';
+const API_BASE_URL = 'https://insify.onrender.com';
 
 const discovery = {
   authorizationEndpoint: 'https://accounts.spotify.com/authorize',
@@ -190,7 +190,12 @@ export default function App() {
     const cardColor = isEven ? '#FFF' : '#CCFF00';
     
     return (
-      <Animated.View entering={FadeInUp.delay(100).springify()} style={[styles.card, { backgroundColor: cardColor, transform: [{rotate}] }]}>
+      <Animated.View entering={FadeInUp.delay(100).springify()} style={[styles.card, { backgroundColor: cardColor, transform: [{rotate}], position: 'relative' }]}>
+        {item.is_most_compatible && (
+          <View style={{ position: 'absolute', top: -14, left: 16, zIndex: 10, backgroundColor: '#000', paddingVertical: 6, paddingHorizontal: 12, transform: [{rotate: '-3deg'}], borderWidth: 3, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+            <Text style={{ color: '#00FFFF', fontWeight: '900', fontSize: 14, letterSpacing: 1 }}>🏆 MOST COMPATIBLE</Text>
+          </View>
+        )}
         <View style={styles.cardTop}>
           <View style={styles.avatarCircle}>
             <Text style={styles.avatarLetter}>{item.name.charAt(0)}</Text>

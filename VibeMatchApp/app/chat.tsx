@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
 
-const API_BASE_URL = '';
+const API_BASE_URL = 'https://insify.onrender.com';
 
 export default function ChatScreen() {
   const { contact, me } = useLocalSearchParams();

@@ -8,6 +8,7 @@ import os
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from matcher import get_most_compatible
 
 app = FastAPI(title="VibeMatch API")
 
@@ -251,6 +252,7 @@ def find_potential_mates(
         db_users = cursor.fetchall()
 
     match_results = []
+    valid_users = []
     for user in db_users:
         db_name = user["name"]
 
@@ -262,7 +264,14 @@ def find_potential_mates(
         dist = haversine_km(my_lat, my_lon, user["latitude"], user["longitude"])
         if dist > max_distance_km:
             continue
+            
+        valid_users.append(dict(user))
 
+    most_compatible_name = get_most_compatible(user_name, my_artists, valid_users) if user_name else None
+
+    for user in valid_users:
+        db_name = user["name"]
+        dist = haversine_km(my_lat, my_lon, user["latitude"], user["longitude"])
         db_artists_list = json.loads(user["top_artists"])
         score, shared = calculate_vibe_match(my_artists, db_artists_list)
 
@@ -276,9 +285,11 @@ def find_potential_mates(
                 "shared_artists": shared,
                 "ai_outing_suggestion": date_idea,
                 "distance_km": round(dist, 1),
+                "is_most_compatible": (db_name == most_compatible_name)
             })
 
-    match_results.sort(key=lambda x: x["compatibility_score"], reverse=True)
+    # Sort so Most Compatible is at the top, then by score
+    match_results.sort(key=lambda x: (x.get("is_most_compatible", False), x["compatibility_score"]), reverse=True)
     return {"status": "success", "total_matches": len(match_results), "data": match_results}
 
 # --- Chat Endpoints ---

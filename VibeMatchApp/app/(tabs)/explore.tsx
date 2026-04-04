@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInUp, useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming, Easing } from 'react-native-reanimated';
 
-const API_BASE_URL = 'http://127.0.0.1:8000';
+const API_BASE_URL = 'https://insify.onrender.com';
 
 type GenderFilter = 'All' | 'Male' | 'Female' | 'Other';
 
@@ -116,7 +116,12 @@ export default function ExploreScreen() {
     const cardColor = isEven ? '#FFF' : '#CCFF00';
 
     return (
-      <Animated.View entering={FadeInUp.delay(index * 80).springify()} style={[styles.card, { backgroundColor: cardColor, transform: [{rotate}] }]}>
+      <Animated.View entering={FadeInUp.delay(index * 80).springify()} style={[styles.card, { backgroundColor: cardColor, transform: [{rotate}], position: 'relative' }]}>
+        {item.is_most_compatible && (
+          <View style={{ position: 'absolute', top: -14, left: 16, zIndex: 10, backgroundColor: '#000', paddingVertical: 6, paddingHorizontal: 12, transform: [{rotate: '-3deg'}], borderWidth: 3, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+            <Text style={{ color: '#00FFFF', fontWeight: '900', fontSize: 14, letterSpacing: 1 }}>🏆 MOST COMPATIBLE</Text>
+          </View>
+        )}
         <View style={styles.cardTop}>
           <View style={styles.avatarCircle}>
             <Text style={styles.avatarLetter}>{item.name.charAt(0)}</Text>
