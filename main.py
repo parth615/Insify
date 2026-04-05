@@ -84,6 +84,7 @@ class OTPVerify(BaseModel):
     phone: str
     email: str
     otp: str
+    gender: Optional[str] = "Other"
 
 class UpdatePlaylists(BaseModel):
     name: str
@@ -320,14 +321,14 @@ def verify_otp(data: OTPVerify):
         existing = cursor.fetchone()
         
         if existing:
-            cursor.execute("UPDATE users SET name = ? WHERE phone = ? OR email = ?", (data.name, data.phone, data.email))
+            cursor.execute("UPDATE users SET name = ?, gender = ? WHERE phone = ? OR email = ?", (data.name, data.gender, data.phone, data.email))
             conn.commit()
             return {"status": "success", "message": "Login successful", "name": data.name}
             
         cursor.execute("""
             INSERT INTO users (name, age, gender, top_artists, latitude, longitude, aura, phone, email, playlists)
-            VALUES (?, 24, 'Other', ?, 28.6139, 77.2090, ?, ?, ?, '[]')
-        """, (data.name, json.dumps(fallback_artists), aura, data.phone, data.email))
+            VALUES (?, 24, ?, ?, 28.6139, 77.2090, ?, ?, ?, '[]')
+        """, (data.name, data.gender, json.dumps(fallback_artists), aura, data.phone, data.email))
         conn.commit()
         
     return {"status": "success", "message": "Registration successful", "name": data.name}

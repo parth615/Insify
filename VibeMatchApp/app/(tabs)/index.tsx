@@ -18,7 +18,6 @@ const discovery = {
   tokenEndpoint: 'https://accounts.spotify.com/api/token',
 };
 
-// Simplified flow: landing → otp → finding-matches → matches
 type AppStep = 'landing' | 'otp' | 'finding-matches' | 'matches';
 
 export default function App() {
@@ -37,6 +36,8 @@ export default function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginOtp, setLoginOtp] = useState('');
   const [authError, setAuthError] = useState('');
+  const [loginGender, setLoginGender] = useState('Male');
+  const [loginPreference, setLoginPreference] = useState('Female');
 
   // Continuous wiggling animation for sticker elements
   const rotation = useSharedValue(-2);
@@ -100,11 +101,13 @@ export default function App() {
         name: loginName,
         phone: loginPhone,
         email: loginEmail,
-        otp: loginOtp
+        otp: loginOtp,
+        gender: loginGender
       });
       if (res.data.status === 'success') {
         const uName = res.data.name;
         await AsyncStorage.setItem('loggedInUser', uName);
+        await AsyncStorage.setItem('genderPreference', loginPreference);
         setLoggedInUser(uName);
         setCurrentStep('finding-matches');
         setTimeout(async () => {
@@ -163,16 +166,16 @@ export default function App() {
     let cardColor = isEven ? '#FFF' : '#CCFF00';
     if (item.is_rival) cardColor = '#000'; // Aggressive black for rival
     const textColor = item.is_rival ? '#FFF' : '#000';
-    
+
     return (
-      <Animated.View entering={FadeInUp.delay(100).springify()} style={[styles.card, { backgroundColor: cardColor, transform: [{rotate}], position: 'relative' }]}>
+      <Animated.View entering={FadeInUp.delay(100).springify()} style={[styles.card, { backgroundColor: cardColor, transform: [{ rotate }], position: 'relative' }]}>
         {item.is_rival && (
-          <View style={{ position: 'absolute', top: -14, left: 16, zIndex: 10, backgroundColor: '#FF0000', paddingVertical: 6, paddingHorizontal: 12, transform: [{rotate: '2deg'}], borderWidth: 3, borderColor: '#FFF', shadowColor: '#FFF', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+          <View style={{ position: 'absolute', top: -14, left: 16, zIndex: 10, backgroundColor: '#FF0000', paddingVertical: 6, paddingHorizontal: 12, transform: [{ rotate: '2deg' }], borderWidth: 3, borderColor: '#FFF', shadowColor: '#FFF', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
             <Text style={{ color: '#FFF', fontWeight: '900', fontSize: 14, letterSpacing: 1 }}>⚔️ SONIC OPPOSITE</Text>
           </View>
         )}
         {item.is_most_compatible && (
-          <View style={{ position: 'absolute', top: -14, left: 16, zIndex: 10, backgroundColor: '#000', paddingVertical: 6, paddingHorizontal: 12, transform: [{rotate: '-3deg'}], borderWidth: 3, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+          <View style={{ position: 'absolute', top: -14, left: 16, zIndex: 10, backgroundColor: '#000', paddingVertical: 6, paddingHorizontal: 12, transform: [{ rotate: '-3deg' }], borderWidth: 3, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
             <Text style={{ color: '#00FFFF', fontWeight: '900', fontSize: 14, letterSpacing: 1 }}>🏆 MOST COMPATIBLE</Text>
           </View>
         )}
@@ -181,10 +184,10 @@ export default function App() {
             <Text style={styles.avatarLetter}>{item.name.charAt(0)}</Text>
           </View>
           <View style={{ flex: 1, marginLeft: 16 }}>
-            <Text style={[styles.cardName, {color: textColor}]}>{item.name}</Text>
-            <Text style={[styles.cardMeta, {color: item.is_rival ? '#CCC' : '#000'}]}>{item.age} · {item.gender} · {item.distance_km ?? '<1'}km away</Text>
+            <Text style={[styles.cardName, { color: textColor }]}>{item.name}</Text>
+            <Text style={[styles.cardMeta, { color: item.is_rival ? '#CCC' : '#000' }]}>{item.age} · {item.gender} · {item.distance_km ?? '<1'}km away</Text>
             {item.aura && (
-              <View style={{ backgroundColor: item.is_rival ? '#FF0000' : '#FF007F', paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start', marginTop: 6, borderWidth: 2, borderColor: item.is_rival ? '#FFF' : '#000', transform: [{rotate: '-1deg'}] }}>
+              <View style={{ backgroundColor: item.is_rival ? '#FF0000' : '#FF007F', paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start', marginTop: 6, borderWidth: 2, borderColor: item.is_rival ? '#FFF' : '#000', transform: [{ rotate: '-1deg' }] }}>
                 <Text style={{ fontSize: 10, fontWeight: '900', color: '#FFF', textTransform: 'uppercase' }}>{item.aura}</Text>
               </View>
             )}
@@ -197,7 +200,7 @@ export default function App() {
         {item.shared_artists?.length > 0 && (
           <View style={styles.chipRow}>
             {item.shared_artists.slice(0, 4).map((artist: string, i: number) => (
-              <View key={i} style={[styles.chip, { transform: [{rotate: i % 2 === 0 ? '-2deg' : '3deg'}] }]}>
+              <View key={i} style={[styles.chip, { transform: [{ rotate: i % 2 === 0 ? '-2deg' : '3deg' }] }]}>
                 <Text style={styles.chipText}>🎵 {artist}</Text>
               </View>
             ))}
@@ -230,17 +233,17 @@ export default function App() {
     return (
       <View style={[styles.landingWrap, { paddingTop: insets.top }]}>
         <Tabs.Screen options={{ tabBarStyle: { display: 'none' } }} />
-        <ImageBackground 
-          source={require('../../assets/images/wavy_bg.png')} 
+        <ImageBackground
+          source={require('../../assets/images/wavy_bg.png')}
           style={StyleSheet.absoluteFillObject}
           resizeMode="cover"
         />
-        
+
         {/* Semi-transparent overlay to ensure text is readable but keeps the wild vibe */}
-        <View style={{...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,0,127,0.3)'}} />
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,0,127,0.3)' }} />
 
         <ScrollView contentContainerStyle={styles.landingScroll} showsVerticalScrollIndicator={false}>
-          
+
           <Animated.View entering={FadeIn.duration(600)} style={styles.heroSection}>
             <Animated.View style={animatedPulseStyle}>
               <Image
@@ -249,7 +252,7 @@ export default function App() {
                 resizeMode="contain"
               />
             </Animated.View>
-            <Animated.Image 
+            <Animated.Image
               source={require('../../assets/images/eye_sticker.png')}
               style={[styles.eyeSticker, animatedStickerStyle]}
               resizeMode="contain"
@@ -271,23 +274,23 @@ export default function App() {
               <View style={styles.tape} />
               <Text style={styles.storyTitle}>BE HONEST WITH YOUR INTENTIONS</Text>
               <Text style={styles.storyBody}>
-                Connect with people who stream what you stream — within 10km of you. 
-                We use your Spotify listening history to find your perfect vibe match. 
+                Connect with people who stream what you stream — within 10km of you.
+                We use your Spotify listening history to find your perfect vibe match.
                 No ghosting, no boring bios. Just pure musical chemistry.
               </Text>
             </View>
           </Animated.View>
 
           <Animated.View entering={FadeInUp.delay(500).springify()} style={styles.featureRow}>
-            <Animated.View style={[styles.stickerFeature, animatedStickerStyle, { backgroundColor: '#CCFF00', transform: [{rotate: '-4deg'}] }]}>
+            <Animated.View style={[styles.stickerFeature, animatedStickerStyle, { backgroundColor: '#CCFF00', transform: [{ rotate: '-4deg' }] }]}>
               <Text style={styles.featureEmoji}>🎧</Text>
               <Text style={styles.featureTitle}>MUSIC-FIRST</Text>
             </Animated.View>
-            <Animated.View style={[styles.stickerFeature, animatedPulseStyle, { backgroundColor: '#00FFFF', transform: [{rotate: '3deg'}] }]}>
+            <Animated.View style={[styles.stickerFeature, animatedPulseStyle, { backgroundColor: '#00FFFF', transform: [{ rotate: '3deg' }] }]}>
               <Text style={styles.featureEmoji}>📍</Text>
               <Text style={styles.featureTitle}>NEARBY</Text>
             </Animated.View>
-            <Animated.View style={[styles.stickerFeature, animatedStickerStyle, { backgroundColor: '#FF5500', transform: [{rotate: '-2deg'}] }]}>
+            <Animated.View style={[styles.stickerFeature, animatedStickerStyle, { backgroundColor: '#FF5500', transform: [{ rotate: '-2deg' }] }]}>
               <Text style={styles.featureEmoji}>💬</Text>
               <Text style={styles.featureTitle}>REAL TALK</Text>
             </Animated.View>
@@ -297,6 +300,28 @@ export default function App() {
             <TextInput style={styles.inputField} placeholder="YOUR NAME" placeholderTextColor="#666" value={loginName} onChangeText={setLoginName} />
             <TextInput style={styles.inputField} placeholder="PHONE NUMBER" placeholderTextColor="#666" keyboardType="phone-pad" value={loginPhone} onChangeText={setLoginPhone} />
             <TextInput style={styles.inputField} placeholder="EMAIL ADDRESS" placeholderTextColor="#666" keyboardType="email-address" value={loginEmail} onChangeText={setLoginEmail} />
+
+            <View style={styles.pickerWrap}>
+              <Text style={styles.pickerLabel}>I AM:</Text>
+              <View style={styles.pickerRow}>
+                {['Male', 'Female', 'Other'].map(g => (
+                  <TouchableOpacity key={g} style={[styles.pill, loginGender === g && styles.pillActive]} onPress={() => setLoginGender(g)}>
+                    <Text style={[styles.pillText, loginGender === g && styles.pillTextActive]}>{g}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.pickerWrap}>
+              <Text style={styles.pickerLabel}>LOOKING FOR:</Text>
+              <View style={styles.pickerRow}>
+                {['All', 'Male', 'Female'].map(p => (
+                  <TouchableOpacity key={p} style={[styles.pill, loginPreference === p && styles.pillActive]} onPress={() => setLoginPreference(p)}>
+                    <Text style={[styles.pillText, loginPreference === p && styles.pillTextActive]}>{p}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
             {authError ? <Text style={{ color: '#FFF', backgroundColor: '#FF0000', padding: 8, marginVertical: 8, fontWeight: 'bold' }}>⚠️ {authError}</Text> : null}
 
@@ -327,26 +352,26 @@ export default function App() {
     return (
       <View style={[styles.landingWrap, { paddingTop: insets.top }]}>
         <Tabs.Screen options={{ tabBarStyle: { display: 'none' } }} />
-        <ImageBackground 
-          source={require('../../assets/images/wavy_bg.png')} 
+        <ImageBackground
+          source={require('../../assets/images/wavy_bg.png')}
           style={StyleSheet.absoluteFillObject}
           resizeMode="cover"
         />
-        <View style={{...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,0,127,0.3)'}} />
-        
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,0,127,0.3)' }} />
+
         <View style={styles.otpContainer}>
           <Text style={styles.findingTitle}>ENTER OTP</Text>
           <Text style={styles.findingSub}>We sent a simulated code to {loginPhone}</Text>
           <Text style={styles.findingSub}>(Hint: Enter 1234)</Text>
-          
-          <TextInput 
-            style={[styles.inputField, { marginTop: 30, textAlign: 'center', fontSize: 32 }]} 
-            placeholder="----" 
-            placeholderTextColor="#666" 
-            keyboardType="number-pad" 
+
+          <TextInput
+            style={[styles.inputField, { marginTop: 30, textAlign: 'center', fontSize: 32 }]}
+            placeholder="----"
+            placeholderTextColor="#666"
+            keyboardType="number-pad"
             maxLength={4}
-            value={loginOtp} 
-            onChangeText={setLoginOtp} 
+            value={loginOtp}
+            onChangeText={setLoginOtp}
           />
 
           {authError ? <Text style={{ color: '#FFF', backgroundColor: '#FF0000', padding: 8, marginVertical: 8, fontWeight: 'bold' }}>⚠️ {authError}</Text> : null}
@@ -372,26 +397,26 @@ export default function App() {
     return (
       <View style={styles.findingWrap}>
         <Tabs.Screen options={{ tabBarStyle: { display: 'none' } }} />
-        <ImageBackground 
-          source={require('../../assets/images/wavy_bg.png')} 
+        <ImageBackground
+          source={require('../../assets/images/wavy_bg.png')}
           style={StyleSheet.absoluteFillObject}
           resizeMode="cover"
         />
-        <View style={{...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,0,127,0.3)'}} />
-        
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,0,127,0.3)' }} />
+
         <Animated.View entering={FadeIn.duration(500)} style={styles.findingCard}>
           <View style={styles.tapeFinding} />
-          
+
           <Animated.View style={[styles.findingSticker, animatedStickerStyle]}>
             <Text style={styles.findingEmoji}>💿</Text>
           </Animated.View>
-          
+
           <View style={styles.findingTitleBox}>
             <Animated.Text style={[styles.findingTitle, animatedPulseStyle]}>FINDING VIBES</Animated.Text>
           </View>
-          
+
           <Text style={styles.findingSub}>SCANNING EXPERT MUSIC LOVERS WITHIN 10KM</Text>
-          
+
           <View style={styles.finderDots}>
             <View style={[styles.dot, { backgroundColor: '#FF007F' }]} />
             <View style={[styles.dot, { backgroundColor: '#CCFF00' }]} />
@@ -407,24 +432,24 @@ export default function App() {
   // ========================================
   return (
     <View style={styles.matchesWrap}>
-      <Tabs.Screen options={{ 
+      <Tabs.Screen options={{
         tabBarStyle: {
-          backgroundColor: '#0D0D0D', 
-          borderTopColor: '#222', 
-          borderTopWidth: 2, 
-          elevation: 0, 
-          shadowOpacity: 0, 
-          height: 60, 
-          paddingBottom: 8, 
-          display: 'flex' 
-        } 
+          backgroundColor: '#0D0D0D',
+          borderTopColor: '#222',
+          borderTopWidth: 2,
+          elevation: 0,
+          shadowOpacity: 0,
+          height: 60,
+          paddingBottom: 8,
+          display: 'flex'
+        }
       }} />
-      <ImageBackground 
-        source={require('../../assets/images/wavy_bg.png')} 
+      <ImageBackground
+        source={require('../../assets/images/wavy_bg.png')}
         style={StyleSheet.absoluteFillObject}
         resizeMode="cover"
       />
-      <View style={{...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,0,127,0.3)'}} />
+      <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,0,127,0.3)' }} />
 
       <View style={[styles.matchesHeader, { paddingTop: insets.top + 12 }]}>
         <View style={styles.matchesHeaderTop}>
@@ -469,20 +494,20 @@ const styles = StyleSheet.create({
   landingWrap: { flex: 1, backgroundColor: '#FF007F' }, // fallback color
   landingScroll: { flexGrow: 1, paddingBottom: 80 },
   heroSection: { alignItems: 'center', paddingTop: 20 },
-  heroImg: { width: '100%', transform: [{rotate: '2deg'}], shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20 },
+  heroImg: { width: '100%', transform: [{ rotate: '2deg' }], shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20 },
   eyeSticker: { position: 'absolute', top: 40, right: 20, width: 80, height: 80, zIndex: 10 },
-  
+
   brandSection: { alignItems: 'center', marginTop: -20, zIndex: 5 },
   titleBox: {
     backgroundColor: '#CCFF00', paddingHorizontal: 16, paddingVertical: 4,
-    borderWidth: 6, borderColor: '#000', transform: [{rotate: '-3deg'}],
+    borderWidth: 6, borderColor: '#000', transform: [{ rotate: '-3deg' }],
     shadowColor: '#000', shadowOffset: { width: 8, height: 8 }, shadowOpacity: 1, shadowRadius: 0,
   },
   brandName: { fontSize: 56, fontWeight: '900', color: '#000', letterSpacing: 2 },
-  
+
   taglineBadge: {
     marginTop: 16, backgroundColor: '#00FFFF', paddingHorizontal: 24, paddingVertical: 12,
-    borderWidth: 4, borderColor: '#000', transform: [{rotate: '2deg'}],
+    borderWidth: 4, borderColor: '#000', transform: [{ rotate: '2deg' }],
     shadowColor: '#000', shadowOffset: { width: 6, height: 6 }, shadowOpacity: 1, shadowRadius: 0,
   },
   taglineText: { color: '#000', fontSize: 18, fontWeight: '900', letterSpacing: 1 },
@@ -492,11 +517,11 @@ const styles = StyleSheet.create({
   storyCard: {
     backgroundColor: '#FFF', borderWidth: 5, borderColor: '#000', padding: 24,
     shadowColor: '#000', shadowOffset: { width: 10, height: 10 }, shadowOpacity: 1, shadowRadius: 0,
-    transform: [{rotate: '-1deg'}]
+    transform: [{ rotate: '-1deg' }]
   },
   tape: {
     position: 'absolute', top: -15, left: '40%', width: 80, height: 30, backgroundColor: 'rgba(255, 255, 255, 0.7)',
-    borderWidth: 1, borderColor: '#ccc', transform: [{rotate: '-5deg'}]
+    borderWidth: 1, borderColor: '#ccc', transform: [{ rotate: '-5deg' }]
   },
   storyTitle: { fontSize: 26, fontWeight: '900', color: '#FF007F', marginBottom: 12, lineHeight: 30, textTransform: 'uppercase' },
   storyBody: { fontSize: 16, color: '#000', lineHeight: 26, fontWeight: '800' },
@@ -513,33 +538,40 @@ const styles = StyleSheet.create({
   ctaSection: { paddingHorizontal: 24, marginTop: 50, alignItems: 'center' },
   spotifyBtn: {
     width: '100%', backgroundColor: '#CCFF00', paddingVertical: 24, alignItems: 'center',
-    borderWidth: 6, borderColor: '#000', transform: [{rotate: '1deg'}],
+    borderWidth: 6, borderColor: '#000', transform: [{ rotate: '1deg' }],
     shadowColor: '#000', shadowOffset: { width: 8, height: 8 }, shadowOpacity: 1, shadowRadius: 0,
   },
   spotifyBtnText: { color: '#000', fontSize: 20, fontWeight: '900', letterSpacing: 1 },
-  
+
   demoBtn: {
     marginTop: 24, backgroundColor: '#FFF', paddingVertical: 14, paddingHorizontal: 32,
-    borderWidth: 4, borderColor: '#000', transform: [{rotate: '-2deg'}],
+    borderWidth: 4, borderColor: '#000', transform: [{ rotate: '-2deg' }],
     shadowColor: '#000', shadowOffset: { width: 5, height: 5 }, shadowOpacity: 1, shadowRadius: 0,
   },
-  demoBtnText: { color: '#000', fontSize: 16, fontWeight: '900' },
   btnDisabled: { opacity: 0.7 },
-  footerNote: { marginTop: 24, fontSize: 13, color: '#000', textAlign: 'center', fontWeight: '900', letterSpacing: 1, backgroundColor: '#FFF', padding: 8, borderWidth: 2, borderColor: '#000', transform: [{rotate: '1deg'}] },
+  footerNote: { marginTop: 24, fontSize: 13, color: '#000', textAlign: 'center', fontWeight: '900', letterSpacing: 1, backgroundColor: '#FFF', padding: 8, borderWidth: 2, borderColor: '#000', transform: [{ rotate: '1deg' }] },
 
   inputField: { backgroundColor: '#FFF', paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, fontWeight: '800', borderWidth: 4, borderColor: '#000', marginBottom: 12, width: '100%', shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, transform: [{rotate: '-1deg'}], color: '#000' },
   otpContainer: { backgroundColor: '#CCFF00', padding: 24, borderWidth: 6, borderColor: '#000', marginHorizontal: 20, marginTop: '20%', shadowColor: '#000', shadowOffset: { width: 10, height: 10 }, shadowOpacity: 1, shadowRadius: 0, transform: [{rotate: '2deg'}], alignItems: 'center' },
 
+  pickerWrap: { width: '100%', marginBottom: 16, alignItems: 'flex-start' },
+  pickerLabel: { color: '#000', fontSize: 14, fontWeight: '900', backgroundColor: '#FFF', paddingHorizontal: 6, borderWidth: 2, borderColor: '#000', marginBottom: 8, transform: [{rotate: '-2deg'}] },
+  pickerRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  pill: { backgroundColor: '#FFF', paddingVertical: 8, paddingHorizontal: 16, borderWidth: 3, borderColor: '#000', shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, transform: [{rotate: '1deg'}] },
+  pillActive: { backgroundColor: '#00FFFF', transform: [{rotate: '-2deg'}], shadowOffset: { width: 2, height: 2 } },
+  pillText: { fontSize: 13, fontWeight: '900', color: '#000', textTransform: 'uppercase' },
+  pillTextActive: { color: '#000' },
+
   // ---- FINDING MATCHES ----
   findingWrap: { flex: 1, backgroundColor: '#FF007F', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
-  findingCard: { 
+  findingCard: {
     backgroundColor: '#FFF', borderWidth: 6, borderColor: '#000', padding: 30, alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 10, height: 10 }, shadowOpacity: 1, shadowRadius: 0,
-    transform: [{rotate: '1deg'}], width: '100%'
+    transform: [{ rotate: '1deg' }], width: '100%'
   },
   tapeFinding: {
     position: 'absolute', top: -15, left: '45%', width: 80, height: 30, backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderWidth: 2, borderColor: '#000', transform: [{rotate: '-5deg'}]
+    borderWidth: 2, borderColor: '#000', transform: [{ rotate: '-5deg' }]
   },
   findingSticker: {
     width: 100, height: 100, borderRadius: 50, backgroundColor: '#CCFF00', borderWidth: 4, borderColor: '#000',
@@ -549,13 +581,13 @@ const styles = StyleSheet.create({
   findingEmoji: { fontSize: 50 },
   findingTitleBox: {
     backgroundColor: '#00FFFF', paddingHorizontal: 16, paddingVertical: 8,
-    borderWidth: 4, borderColor: '#000', transform: [{rotate: '-2deg'}], marginBottom: 16,
+    borderWidth: 4, borderColor: '#000', transform: [{ rotate: '-2deg' }], marginBottom: 16,
     shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0,
   },
   findingTitle: {
     fontSize: 24, fontWeight: '900', color: '#000', textTransform: 'uppercase', letterSpacing: 2,
   },
-  findingSub: { fontSize: 16, color: '#000', marginTop: 8, fontWeight: '900', textAlign: 'center', backgroundColor: '#CCFF00', padding: 8, borderWidth: 3, borderColor: '#000', transform: [{rotate: '1deg'}] },
+  findingSub: { fontSize: 16, color: '#000', marginTop: 8, fontWeight: '900', textAlign: 'center', backgroundColor: '#CCFF00', padding: 8, borderWidth: 3, borderColor: '#000', transform: [{ rotate: '1deg' }] },
   finderDots: { flexDirection: 'row', gap: 12, marginTop: 24 },
   dot: { width: 16, height: 16, borderRadius: 8, borderWidth: 3, borderColor: '#000' },
 
@@ -565,16 +597,16 @@ const styles = StyleSheet.create({
   matchesHeaderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   matchesHeaderZanyBox: {
     backgroundColor: '#00FFFF', paddingHorizontal: 16, paddingVertical: 12,
-    borderWidth: 4, borderColor: '#000', transform: [{rotate: '-2deg'}],
+    borderWidth: 4, borderColor: '#000', transform: [{ rotate: '-2deg' }],
     shadowColor: '#000', shadowOffset: { width: 6, height: 6 }, shadowOpacity: 1, shadowRadius: 0,
     flex: 1, marginRight: 16,
   },
   matchesGreet: { fontSize: 24, fontWeight: '900', color: '#000', textTransform: 'uppercase', letterSpacing: 1 },
   matchesSub: { fontSize: 13, color: '#000', marginTop: 4, fontWeight: '900', letterSpacing: 0.5 },
-  
+
   logoutBtn: {
-    width: 44, height: 44, backgroundColor: '#FFF', borderWidth: 4, borderColor: '#000', 
-    alignItems: 'center', justifyContent: 'center', transform: [{rotate: '3deg'}],
+    width: 44, height: 44, backgroundColor: '#FFF', borderWidth: 4, borderColor: '#000',
+    alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '3deg' }],
     shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0,
   },
   logoutText: { color: '#000', fontSize: 18, fontWeight: '900' },
@@ -588,15 +620,15 @@ const styles = StyleSheet.create({
   avatarCircle: {
     width: 56, height: 56, borderRadius: 28, backgroundColor: '#FF007F',
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 4, borderColor: '#000', transform: [{rotate: '-5deg'}],
+    borderWidth: 4, borderColor: '#000', transform: [{ rotate: '-5deg' }],
   },
   avatarLetter: { color: '#FFF', fontSize: 26, fontWeight: '900' },
   cardName: { fontSize: 24, fontWeight: '900', color: '#000', textTransform: 'uppercase', letterSpacing: 1 },
   cardMeta: { fontSize: 14, color: '#000', fontWeight: '800', marginTop: 2, letterSpacing: 0.5 },
-  
+
   scorePill: {
     backgroundColor: '#FF007F', paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 4, borderColor: '#000', transform: [{rotate: '4deg'}],
+    borderWidth: 4, borderColor: '#000', transform: [{ rotate: '4deg' }],
     shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0,
   },
   scoreNum: { fontSize: 16, fontWeight: '900', color: '#FFF' },
@@ -611,11 +643,11 @@ const styles = StyleSheet.create({
 
   ideaSection: {
     backgroundColor: '#1DB954', padding: 16, borderWidth: 4, borderColor: '#000',
-    marginBottom: 20, transform: [{rotate: '1deg'}],
+    marginBottom: 20, transform: [{ rotate: '1deg' }],
   },
   tapeSmall: {
     position: 'absolute', top: -10, left: 10, width: 40, height: 20, backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderWidth: 2, borderColor: '#000', transform: [{rotate: '-8deg'}]
+    borderWidth: 2, borderColor: '#000', transform: [{ rotate: '-8deg' }]
   },
   ideaLabel: {
     fontSize: 12, color: '#000', fontWeight: '900', letterSpacing: 2, marginBottom: 8,
@@ -625,13 +657,13 @@ const styles = StyleSheet.create({
 
   chatBtn: {
     backgroundColor: '#00FFFF', paddingVertical: 18, alignItems: 'center',
-    borderWidth: 5, borderColor: '#000', transform: [{rotate: '-1deg'}],
+    borderWidth: 5, borderColor: '#000', transform: [{ rotate: '-1deg' }],
     shadowColor: '#000', shadowOffset: { width: 6, height: 6 }, shadowOpacity: 1, shadowRadius: 0,
   },
   chatBtnText: { color: '#000', fontSize: 18, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
 
   emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyEmoji: { fontSize: 50, marginBottom: 0 },
-  emptyTitle: { fontSize: 32, fontWeight: '900', color: '#FFF', marginBottom: 12, marginTop: 24, textShadowColor: '#000', textShadowOffset: {width: 4, height: 4}, textShadowRadius: 0 },
-  emptySub: { fontSize: 16, color: '#000', textAlign: 'center', fontWeight: '900', lineHeight: 24, backgroundColor: '#FFF', padding: 12, borderWidth: 3, borderColor: '#000', transform: [{rotate: '-2deg'}] },
+  emptyTitle: { fontSize: 32, fontWeight: '900', color: '#FFF', marginBottom: 12, marginTop: 24, textShadowColor: '#000', textShadowOffset: { width: 4, height: 4 }, textShadowRadius: 0 },
+  emptySub: { fontSize: 16, color: '#000', textAlign: 'center', fontWeight: '900', lineHeight: 24, backgroundColor: '#FFF', padding: 12, borderWidth: 3, borderColor: '#000', transform: [{ rotate: '-2deg' }] },
 });
