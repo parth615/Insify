@@ -36,6 +36,7 @@ export default function App() {
   const [loginPhone, setLoginPhone] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginOtp, setLoginOtp] = useState('');
+  const [authError, setAuthError] = useState('');
 
   // Continuous wiggling animation for sticker elements
   const rotation = useSharedValue(-2);
@@ -71,8 +72,9 @@ export default function App() {
   }));
 
   const requestOtp = async () => {
+    setAuthError('');
     if (!loginName || !loginPhone || !loginEmail) {
-      Alert.alert("Missing Fields", "Please fill in Name, Phone, and Email.");
+      setAuthError("Please fill in Name, Phone, and Email.");
       return;
     }
     setLoading(true);
@@ -82,14 +84,15 @@ export default function App() {
         email: loginEmail
       });
       setCurrentStep('otp');
-    } catch (e) {
-      Alert.alert("Error", "Could not send OTP.");
+    } catch (e: any) {
+      setAuthError(e.response?.data?.detail || "Could not send OTP. Make sure backend is live.");
     } finally {
       setLoading(false);
     }
   };
 
   const verifyOtp = async () => {
+    setAuthError('');
     if (!loginOtp) return;
     setLoading(true);
     try {
@@ -110,7 +113,7 @@ export default function App() {
         }, 2500);
       }
     } catch (e: any) {
-      Alert.alert("Error", e.response?.data?.detail || "Invalid OTP");
+      setAuthError(e.response?.data?.detail || "Invalid OTP");
     } finally {
       setLoading(false);
     }
@@ -295,6 +298,8 @@ export default function App() {
             <TextInput style={styles.inputField} placeholder="PHONE NUMBER" placeholderTextColor="#666" keyboardType="phone-pad" value={loginPhone} onChangeText={setLoginPhone} />
             <TextInput style={styles.inputField} placeholder="EMAIL ADDRESS" placeholderTextColor="#666" keyboardType="email-address" value={loginEmail} onChangeText={setLoginEmail} />
 
+            {authError ? <Text style={{ color: '#FFF', backgroundColor: '#FF0000', padding: 8, marginVertical: 8, fontWeight: 'bold' }}>⚠️ {authError}</Text> : null}
+
             <TouchableOpacity
               style={[styles.spotifyBtn, (loading) && styles.btnDisabled]}
               onPress={requestOtp}
@@ -343,6 +348,8 @@ export default function App() {
             value={loginOtp} 
             onChangeText={setLoginOtp} 
           />
+
+          {authError ? <Text style={{ color: '#FFF', backgroundColor: '#FF0000', padding: 8, marginVertical: 8, fontWeight: 'bold' }}>⚠️ {authError}</Text> : null}
 
           <TouchableOpacity
             style={[styles.spotifyBtn, { marginTop: 20 }, (loading) && styles.btnDisabled]}
