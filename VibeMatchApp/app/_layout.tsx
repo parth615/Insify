@@ -4,6 +4,12 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
+
+if (Platform.OS === 'web') {
+  WebBrowser.maybeCompleteAuthSession();
+}
 
 export const unstable_settings = {
   anchor: '(tabs)',
