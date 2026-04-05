@@ -51,6 +51,12 @@ def init_db():
             cursor.execute("ALTER TABLE users ADD COLUMN aura TEXT DEFAULT 'Mysterious Vibe'")
         except sqlite3.OperationalError:
             pass # Column already exists
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN phone TEXT")
+            cursor.execute("ALTER TABLE users ADD COLUMN email TEXT")
+            cursor.execute("ALTER TABLE users ADD COLUMN playlists TEXT DEFAULT '[]'")
+        except sqlite3.OperationalError:
+            pass
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,6 +74,22 @@ init_db()
 
 
 # --- Pydantic Models ---
+
+class OTPRequest(BaseModel):
+    phone: str
+    email: str
+
+class OTPVerify(BaseModel):
+    name: str
+    phone: str
+    email: str
+    otp: str
+
+class UpdatePlaylists(BaseModel):
+    name: str
+    playlists: list[str]
+    top_artists: list[str]
+
 
 class UserRegistration(BaseModel):
     name: str
@@ -183,6 +205,50 @@ def generate_aura(artists: list[str]) -> str:
 
 # --- API Endpoints ---
 
+@app.post("/request-otp")
+def request_otp(data: OTPRequest):
+    print(f"Simulating sending OTP 1234 to phone: {data.phone}, email: {data.email}")
+    return {"status": "success", "message": "OTP sent!"}
+
+@app.post("/verify-otp")
+def verify_otp(data: OTPVerify):
+    if data.otp != "1234":
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+        
+    fallback_artists = ['Pritam', 'Arijit Singh', 'Ankit Tiwari', 'Taimour Baig', 'KK']
+    aura = generate_aura(fallback_artists)
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE phone = ? OR email = ?", (data.phone, data.email))
+        existing = cursor.fetchone()
+        
+        if existing:
+            cursor.execute("UPDATE users SET name = ? WHERE phone = ? OR email = ?", (data.name, data.phone, data.email))
+            conn.commit()
+            return {"status": "success", "message": "Login successful", "name": data.name}
+            
+        cursor.execute("""
+            INSERT INTO users (name, age, gender, top_artists, latitude, longitude, aura, phone, email, playlists)
+            VALUES (?, 24, 'Other', ?, 28.6139, 77.2090, ?, ?, ?, '[]')
+        """, (data.name, json.dumps(fallback_artists), aura, data.phone, data.email))
+        conn.commit()
+        
+    return {"status": "success", "message": "Registration successful", "name": data.name}
+
+@app.post("/update-playlists")
+def update_playlists(data: UpdatePlaylists):
+    with get_db() as conn:
+        cursor = conn.cursor()
+        aura = generate_aura(data.top_artists)
+        cursor.execute("""
+            UPDATE users 
+            SET playlists = ?, top_artists = ?, aura = ?
+            WHERE name = ?
+        """, (json.dumps(data.playlists), json.dumps(data.top_artists), aura, data.name))
+        conn.commit()
+    return {"status": "success"}
+
 @app.post("/register")
 def register_new_user(user: UserRegistration):
     """Saves a new user. Simplified: no Aadhar, no email/phone."""
@@ -217,7 +283,7 @@ def get_user_profile(user_name: str):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT name, age, gender, top_artists, latitude, longitude, aura
+            SELECT name, age, gender, top_artists, latitude, longitude, aura, playlists
             FROM users WHERE name = ?
         """, (user_name,))
         row = cursor.fetchone()
@@ -235,6 +301,7 @@ def get_user_profile(user_name: str):
             "latitude": row["latitude"],
             "longitude": row["longitude"],
             "aura": row["aura"],
+            "playlists": json.loads(row["playlists"] if row["playlists"] else "[]")
         }
     }
 
@@ -265,7 +332,7 @@ def find_potential_mates(
                 my_lon = row["longitude"]
 
         query = """
-            SELECT name, age, gender, top_artists, latitude, longitude, aura 
+            SELECT name, age, gender, top_artists, latitude, longitude, aura, playlists 
             FROM users 
             WHERE age BETWEEN ? AND ?
         """
@@ -313,7 +380,8 @@ def find_potential_mates(
                 "ai_outing_suggestion": date_idea,
                 "distance_km": round(dist, 1),
                 "is_most_compatible": (db_name == most_compatible_name),
-                "aura": user["aura"]
+                "aura": user["aura"],
+                "playlists": json.loads(user["playlists"] if user["playlists"] else "[]")
             })
 
     # Find the rival (0% compatibility)
