@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, field_validator
 import sqlite3
 import json
@@ -42,9 +42,15 @@ def init_db():
                 gender TEXT NOT NULL,
                 top_artists TEXT NOT NULL,
                 latitude REAL DEFAULT 28.6139,
-                longitude REAL DEFAULT 77.2090
+                longitude REAL DEFAULT 77.2090,
+                aura TEXT DEFAULT 'Mysterious Vibe'
             )
         ''')
+        # Handle migration for existing DB
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN aura TEXT DEFAULT 'Mysterious Vibe'")
+        except sqlite3.OperationalError:
+            pass # Column already exists
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,6 +163,24 @@ def calculate_vibe_match(user1_artists: list[str], user2_artists: list[str]):
     return round(score, 2), shared
 
 
+def generate_aura(artists: list[str]) -> str:
+    """Generates a zany Musical Aura based on artists."""
+    artists_lower = [a.lower() for a in artists]
+    joined = " ".join(artists_lower)
+    
+    if any(x in joined for x in ["pritam", "arijit", "kk", "shaan", "atif"]):
+        return "Nostalgic Melancholy 🥀"
+    elif any(x in joined for x in ["weeknd", "drake", "kendrick", "travis"]):
+        return "Neon Midnight 🦇"
+    elif any(x in joined for x in ["taylor", "dua", "pop", "ariana"]):
+        return "Pop Royalty 👑"
+    elif any(x in joined for x in ["rock", "metal", "pink floyd", "nirvana", "arctic"]):
+        return "Chaotic Indie 🎸"
+    elif any(x in joined for x in ["lofi", "chill", "jazz"]):
+        return "Golden Hour Drift 🌅"
+    else:
+        return random.choice(["Mysterious Vibe 🔮", "Electric Soul ⚡", "Hyper-Pop Dreams 🦄"])
+
 # --- API Endpoints ---
 
 @app.post("/register")
@@ -164,22 +188,24 @@ def register_new_user(user: UserRegistration):
     """Saves a new user. Simplified: no Aadhar, no email/phone."""
     with get_db() as conn:
         cursor = conn.cursor()
+        aura = generate_aura(user.top_artists)
+        
         # Check if user already exists by name
         cursor.execute("SELECT id FROM users WHERE name = ?", (user.name,))
         existing = cursor.fetchone()
         if existing:
             # Update their artists and location instead
             cursor.execute("""
-                UPDATE users SET top_artists = ?, latitude = ?, longitude = ?
+                UPDATE users SET top_artists = ?, latitude = ?, longitude = ?, aura = ?
                 WHERE name = ?
-            """, (json.dumps(user.top_artists), user.latitude, user.longitude, user.name))
+            """, (json.dumps(user.top_artists), user.latitude, user.longitude, aura, user.name))
             conn.commit()
             return {"status": "success", "message": f"Welcome back, {user.name}! Profile updated."}
 
         cursor.execute("""
-            INSERT INTO users (name, age, gender, top_artists, latitude, longitude) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (user.name, user.age, user.gender, json.dumps(user.top_artists), user.latitude, user.longitude))
+            INSERT INTO users (name, age, gender, top_artists, latitude, longitude, aura) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user.name, user.age, user.gender, json.dumps(user.top_artists), user.latitude, user.longitude, aura))
         conn.commit()
 
     return {"status": "success", "message": f"Welcome to VibeMatch, {user.name}!"}
@@ -191,7 +217,7 @@ def get_user_profile(user_name: str):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT name, age, gender, top_artists, latitude, longitude
+            SELECT name, age, gender, top_artists, latitude, longitude, aura
             FROM users WHERE name = ?
         """, (user_name,))
         row = cursor.fetchone()
@@ -208,6 +234,7 @@ def get_user_profile(user_name: str):
             "top_artists": json.loads(row["top_artists"]),
             "latitude": row["latitude"],
             "longitude": row["longitude"],
+            "aura": row["aura"],
         }
     }
 
@@ -238,7 +265,7 @@ def find_potential_mates(
                 my_lon = row["longitude"]
 
         query = """
-            SELECT name, age, gender, top_artists, latitude, longitude 
+            SELECT name, age, gender, top_artists, latitude, longitude, aura 
             FROM users 
             WHERE age BETWEEN ? AND ?
         """
@@ -285,11 +312,29 @@ def find_potential_mates(
                 "shared_artists": shared,
                 "ai_outing_suggestion": date_idea,
                 "distance_km": round(dist, 1),
-                "is_most_compatible": (db_name == most_compatible_name)
+                "is_most_compatible": (db_name == most_compatible_name),
+                "aura": user["aura"]
             })
 
-    # Sort so Most Compatible is at the top, then by score
-    match_results.sort(key=lambda x: (x.get("is_most_compatible", False), x["compatibility_score"]), reverse=True)
+    # Find the rival (0% compatibility)
+    if match_results:
+        # Sort by score ascending to find bottom
+        sorted_for_rival = sorted(match_results, key=lambda x: x["compatibility_score"])
+        if sorted_for_rival[0]["compatibility_score"] < 10:
+            rival_name = sorted_for_rival[0]["name"]
+            for m in match_results:
+                if m["name"] == rival_name:
+                    m["is_rival"] = True
+                    # Let the rival have a funny suggestion
+                    m["ai_outing_suggestion"] = "Go to a record store and brutally judge each other's purchases."
+                    break
+
+    # Sort so Most Compatible is at the top, followed by Rival, then by score
+    match_results.sort(key=lambda x: (
+        x.get("is_most_compatible", False),
+        x.get("is_rival", False),
+        x["compatibility_score"]
+    ), reverse=True)
     return {"status": "success", "total_matches": len(match_results), "data": match_results}
 
 # --- Chat Endpoints ---
@@ -370,6 +415,84 @@ def generate_icebreaker(user_a: str, user_b: str):
     # Add a touch of neo-brutalist AI flavor
     prefix = random.choice(["[AI VIBE CHECK] ", "[AI RIZZ] ", "[MATCH DETECTED] "])
     return {"status": "success", "icebreaker": prefix + icebreaker}
+
+@app.get("/generate-beef")
+def generate_beef(user_a: str, user_b: str):
+    """Simulates an AI generating a highly contentious music debate."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, top_artists FROM users WHERE name IN (?, ?)", (user_a, user_b))
+        rows = cursor.fetchall()
+        
+    if len(rows) < 2:
+        return {"status": "success", "beef": "AI VIBE CHECK: Who has better taste? Defend yourselves! 🥊"}
+        
+    user_a_artists = []
+    user_b_artists = []
+    for r in rows:
+        if r["name"] == user_a: user_a_artists = json.loads(r["top_artists"])
+        else: user_b_artists = json.loads(r["top_artists"])
+            
+    set_a = set(user_a_artists)
+    set_b = set(user_b_artists)
+    only_a = list(set_a - set_b)
+    only_b = list(set_b - set_a)
+    
+    if only_a and only_b:
+        artist_a = random.choice(only_a)
+        artist_b = random.choice(only_b)
+        prompts = [
+            f"AI VIBE CHECK: Settle this. Who would win in a bar fight: {artist_a} or {artist_b}? 🥊",
+            f"HOT TAKE: {artist_a} is wildly better than {artist_b}. Defend your answer! 💥",
+            f"Who cried more while listening to their top artist? {user_a} listens to {artist_a}, {user_b} listens to {artist_b}. Go! 🥊"
+        ]
+        beef = random.choice(prompts)
+    else:
+        beef = "AI VIBE CHECK: Settle this. Is modern pop music officially dead? 🥊"
+        
+    return {"status": "success", "beef": beef}
+
+# --- WebSockets Server ---
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: dict[str, list[WebSocket]] = {}
+
+    async def connect(self, room_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if room_id not in self.active_connections:
+            self.active_connections[room_id] = []
+        self.active_connections[room_id].append(websocket)
+
+    def disconnect(self, room_id: str, websocket: WebSocket):
+        if room_id in self.active_connections:
+            if websocket in self.active_connections[room_id]:
+                self.active_connections[room_id].remove(websocket)
+            if not self.active_connections[room_id]:
+                del self.active_connections[room_id]
+
+    async def broadcast(self, room_id: str, message: dict):
+        if room_id in self.active_connections:
+            for connection in self.active_connections[room_id]:
+                await connection.send_json(message)
+
+manager = ConnectionManager()
+
+@app.websocket("/ws/live/{room_id}/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, room_id: str, client_id: str):
+    await manager.connect(room_id, websocket)
+    try:
+        await manager.broadcast(room_id, {"type": "system", "text": f"{client_id} joined the room."})
+        while True:
+            data = await websocket.receive_text()
+            # Expecting JSON data for specific media controls from DJ or just chat
+            try:
+                parsed_data = json.loads(data)
+                await manager.broadcast(room_id, parsed_data)
+            except:
+                await manager.broadcast(room_id, {"type": "chat", "client_id": client_id, "text": data})
+    except WebSocketDisconnect:
+        manager.disconnect(room_id, websocket)
+        await manager.broadcast(room_id, {"type": "system", "text": f"{client_id} disconnected."})
 
 # --- Static Frontend Serving ---
 dist_path = os.path.join(os.path.dirname(__file__), "VibeMatchApp", "dist")

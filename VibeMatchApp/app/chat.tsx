@@ -82,6 +82,22 @@ export default function ChatScreen() {
     }
   };
 
+  const handleBeef = async () => {
+    setIsGenerating(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/generate-beef`, {
+        params: { user_a: me, user_b: contact }
+      });
+      if (res.data.status === 'success') {
+        setInputText(res.data.beef);
+      }
+    } catch (error) {
+      console.log("Error generating beef");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const renderMessageText = (text: string, isMe: boolean) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = text.split(urlRegex);
@@ -173,6 +189,13 @@ export default function ChatScreen() {
           disabled={isGenerating}
         >
           <Text style={styles.aiBtnText}>{isGenerating ? '...' : '✨'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.aiBtn, { backgroundColor: '#FF0000', borderColor: '#FFF' }, isGenerating && { opacity: 0.7 }]} 
+          onPress={handleBeef} 
+          disabled={isGenerating}
+        >
+          <Text style={styles.aiBtnText}>{isGenerating ? '...' : '🥊'}</Text>
         </TouchableOpacity>
         <TextInput
           style={styles.textInput}

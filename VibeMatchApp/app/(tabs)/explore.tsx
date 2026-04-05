@@ -113,10 +113,17 @@ export default function ExploreScreen() {
   const renderMatchCard = ({ item, index }: { item: any; index: number }) => {
     const isEven = index % 2 === 0;
     const rotate = isEven ? '-1.5deg' : '1.5deg';
-    const cardColor = isEven ? '#FFF' : '#CCFF00';
+    let cardColor = isEven ? '#FFF' : '#CCFF00';
+    if (item.is_rival) cardColor = '#000'; // Aggressive black for rival
+    const textColor = item.is_rival ? '#FFF' : '#000';
 
     return (
       <Animated.View entering={FadeInUp.delay(index * 80).springify()} style={[styles.card, { backgroundColor: cardColor, transform: [{rotate}], position: 'relative' }]}>
+        {item.is_rival && (
+          <View style={{ position: 'absolute', top: -14, left: 16, zIndex: 10, backgroundColor: '#FF0000', paddingVertical: 6, paddingHorizontal: 12, transform: [{rotate: '2deg'}], borderWidth: 3, borderColor: '#FFF', shadowColor: '#FFF', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
+            <Text style={{ color: '#FFF', fontWeight: '900', fontSize: 14, letterSpacing: 1 }}>⚔️ SONIC OPPOSITE</Text>
+          </View>
+        )}
         {item.is_most_compatible && (
           <View style={{ position: 'absolute', top: -14, left: 16, zIndex: 10, backgroundColor: '#000', paddingVertical: 6, paddingHorizontal: 12, transform: [{rotate: '-3deg'}], borderWidth: 3, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0 }}>
             <Text style={{ color: '#00FFFF', fontWeight: '900', fontSize: 14, letterSpacing: 1 }}>🏆 MOST COMPATIBLE</Text>
@@ -127,8 +134,13 @@ export default function ExploreScreen() {
             <Text style={styles.avatarLetter}>{item.name.charAt(0)}</Text>
           </View>
           <View style={{ flex: 1, marginLeft: 16 }}>
-            <Text style={styles.cardName}>{item.name}</Text>
-            <Text style={styles.cardMeta}>{item.age} · {item.gender} · {item.distance_km ?? '<1'}km away</Text>
+            <Text style={[styles.cardName, {color: textColor}]}>{item.name}</Text>
+            <Text style={[styles.cardMeta, {color: item.is_rival ? '#CCC' : '#000'}]}>{item.age} · {item.gender} · {item.distance_km ?? '<1'}km away</Text>
+            {item.aura && (
+              <View style={{ backgroundColor: item.is_rival ? '#FF0000' : '#FF007F', paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start', marginTop: 6, borderWidth: 2, borderColor: item.is_rival ? '#FFF' : '#000', transform: [{rotate: '-1deg'}] }}>
+                <Text style={{ fontSize: 10, fontWeight: '900', color: '#FFF', textTransform: 'uppercase' }}>{item.aura}</Text>
+              </View>
+            )}
           </View>
           <View style={styles.scorePill}>
             <Text style={styles.scoreNum}>{getScoreEmoji(item.compatibility_score)} {item.compatibility_score}%</Text>
@@ -145,14 +157,14 @@ export default function ExploreScreen() {
           </View>
         )}
 
-        <View style={styles.ideaSection}>
-          <View style={styles.tapeSmall} />
-          <Text style={styles.ideaLabel}>DATE IDEA</Text>
-          <Text style={styles.ideaBody}>📍 {item.ai_outing_suggestion}</Text>
+        <View style={[styles.ideaSection, item.is_rival && { backgroundColor: '#FF0000', borderColor: '#FFF' }]}>
+          <View style={[styles.tapeSmall, item.is_rival && { backgroundColor: '#000' }]} />
+          <Text style={styles.ideaLabel}>{item.is_rival ? 'COMBAT IDEA' : 'DATE IDEA'}</Text>
+          <Text style={[styles.ideaBody, item.is_rival && { color: '#FFF' }]}>📍 {item.ai_outing_suggestion}</Text>
         </View>
 
         <TouchableOpacity
-          style={styles.chatBtn}
+          style={[styles.chatBtn, item.is_rival && { backgroundColor: '#FFF', borderColor: '#FF0000' }]}
           activeOpacity={0.8}
           onPress={() => {
             if (currentUser) {
