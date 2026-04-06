@@ -38,6 +38,7 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [loginGender, setLoginGender] = useState('Male');
   const [loginPreference, setLoginPreference] = useState('Female');
+  const [loginCalls, setLoginCalls] = useState('YES');
 
   // Continuous wiggling animation for sticker elements
   const rotation = useSharedValue(-2);
@@ -102,12 +103,14 @@ export default function App() {
         phone: loginPhone,
         email: loginEmail,
         otp: loginOtp,
-        gender: loginGender
+        gender: loginGender,
+        calls_enabled: loginCalls === 'YES'
       });
       if (res.data.status === 'success') {
         const uName = res.data.name;
         await AsyncStorage.setItem('loggedInUser', uName);
         await AsyncStorage.setItem('genderPreference', loginPreference);
+        await AsyncStorage.setItem('callsEnabled', loginCalls === 'YES' ? 'true' : 'false');
         setLoggedInUser(uName);
         setCurrentStep('finding-matches');
         setTimeout(async () => {
@@ -318,6 +321,17 @@ export default function App() {
                 {['All', 'Male', 'Female'].map(p => (
                   <TouchableOpacity key={p} style={[styles.pill, loginPreference === p && styles.pillActive]} onPress={() => setLoginPreference(p)}>
                     <Text style={[styles.pillText, loginPreference === p && styles.pillTextActive]}>{p}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.pickerWrap}>
+              <Text style={[styles.pickerLabel, {backgroundColor: '#FF007F', color: '#FFF'}]}>ALLOW VIDEO/AUDIO CALLS?</Text>
+              <View style={styles.pickerRow}>
+                {['YES', 'NO'].map(o => (
+                  <TouchableOpacity key={o} style={[styles.pill, loginCalls === o && styles.pillActive]} onPress={() => setLoginCalls(o)}>
+                    <Text style={[styles.pillText, loginCalls === o && styles.pillTextActive]}>{o}</Text>
                   </TouchableOpacity>
                 ))}
               </View>

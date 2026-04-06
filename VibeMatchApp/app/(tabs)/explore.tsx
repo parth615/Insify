@@ -247,7 +247,7 @@ export default function ExploreScreen() {
           activeOpacity={0.8}
           onPress={() => {
             if (currentUser) {
-              router.push({ pathname: '/chat', params: { contact: item.name, me: currentUser } });
+              router.push({ pathname: '/chat', params: { contact: item.name, me: currentUser, callsEnabled: String(item.calls_enabled) } });
             }
           }}
         >

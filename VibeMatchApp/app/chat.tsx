@@ -5,12 +5,13 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
 const API_BASE_URL = 'https://insify.onrender.com';
 
 export default function ChatScreen() {
-  const { contact, me } = useLocalSearchParams();
+  const { contact, me, callsEnabled } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -18,7 +19,15 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeCallUrl, setActiveCallUrl] = useState<string | null>(null);
+  const [myCallsEnabled, setMyCallsEnabled] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    (async () => {
+      const pref = await AsyncStorage.getItem('callsEnabled');
+      setMyCallsEnabled(pref === 'true');
+    })();
+  }, []);
 
   const fetchHistory = async () => {
     if (!me || !contact) return;
@@ -99,7 +108,14 @@ export default function ChatScreen() {
     }
   };
 
+  const canCall = myCallsEnabled && callsEnabled === 'true';
+
   const handleCall = (type: 'Video' | 'Voice') => {
+    if (!canCall) {
+      alert("Calls are disabled for privacy. Both users must select 'YES' to Video Calls during onboarding.");
+      return;
+    }
+    
     // Ensure both users generate the exact same room ID regardless of who calls who
     const roomName = `VibeMatch_${[me as string, contact as string].sort().join('_').replace(/[^a-zA-Z0-9]/g, '')}`;
     const url = `https://meet.jit.si/${roomName}`;
@@ -176,11 +192,11 @@ export default function ChatScreen() {
           <Text style={styles.headerName}>{contact}</Text>
           <Text style={styles.headerSub}>VIBE MATCH CHAT</Text>
         </View>
-        <View style={{flexDirection: 'row', gap: 6}}>
-          <TouchableOpacity style={[styles.callBtn, {backgroundColor: '#FF007F'}]} onPress={() => handleCall('Video')}>
+        <View style={{flexDirection: 'row', gap: 6, opacity: canCall ? 1 : 0.4}}>
+          <TouchableOpacity style={[styles.callBtn, {backgroundColor: '#FF007F'}]} onPress={() => handleCall('Video')} activeOpacity={canCall ? 0.2 : 1}>
             <Text style={styles.callBtnText}>📹</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.callBtn, {backgroundColor: '#1DB954'}]} onPress={() => handleCall('Voice')}>
+          <TouchableOpacity style={[styles.callBtn, {backgroundColor: '#1DB954'}]} onPress={() => handleCall('Voice')} activeOpacity={canCall ? 0.2 : 1}>
             <Text style={styles.callBtnText}>📞</Text>
           </TouchableOpacity>
         </View>

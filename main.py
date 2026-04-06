@@ -57,6 +57,10 @@ def init_db():
             cursor.execute("ALTER TABLE users ADD COLUMN playlists TEXT DEFAULT '[]'")
         except sqlite3.OperationalError:
             pass
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN calls_enabled BOOLEAN DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,6 +89,7 @@ class OTPVerify(BaseModel):
     email: str
     otp: str
     gender: Optional[str] = "Other"
+    calls_enabled: bool = False
 
 class UpdatePlaylists(BaseModel):
     name: str
@@ -325,14 +330,14 @@ def verify_otp(data: OTPVerify):
         existing = cursor.fetchone()
         
         if existing:
-            cursor.execute("UPDATE users SET name = ?, gender = ? WHERE phone = ? OR email = ?", (data.name, data.gender, data.phone, data.email))
+            cursor.execute("UPDATE users SET name = ?, gender = ?, calls_enabled = ? WHERE phone = ? OR email = ?", (data.name, data.gender, data.calls_enabled, data.phone, data.email))
             conn.commit()
             return {"status": "success", "message": "Login successful", "name": data.name}
             
         cursor.execute("""
-            INSERT INTO users (name, age, gender, top_artists, latitude, longitude, aura, phone, email, playlists)
-            VALUES (?, 24, ?, ?, 28.6139, 77.2090, ?, ?, ?, '[]')
-        """, (data.name, data.gender, json.dumps(fallback_artists), aura, data.phone, data.email))
+            INSERT INTO users (name, age, gender, top_artists, latitude, longitude, aura, phone, email, playlists, calls_enabled)
+            VALUES (?, 24, ?, ?, 28.6139, 77.2090, ?, ?, ?, '[]', ?)
+        """, (data.name, data.gender, json.dumps(fallback_artists), aura, data.phone, data.email, data.calls_enabled))
         conn.commit()
         
     return {"status": "success", "message": "Registration successful", "name": data.name}
@@ -433,7 +438,7 @@ def find_potential_mates(
                 my_lon = row["longitude"]
 
         query = """
-            SELECT name, age, gender, top_artists, latitude, longitude, aura, playlists 
+            SELECT name, age, gender, top_artists, latitude, longitude, aura, playlists, calls_enabled 
             FROM users 
             WHERE age BETWEEN ? AND ?
         """
@@ -482,7 +487,8 @@ def find_potential_mates(
                 "distance_km": round(dist, 1),
                 "is_most_compatible": (db_name == most_compatible_name),
                 "aura": user["aura"],
-                "playlists": json.loads(user["playlists"] if user["playlists"] else "[]")
+                "playlists": json.loads(user["playlists"] if user["playlists"] else "[]"),
+                "calls_enabled": bool(user["calls_enabled"])
             })
 
     # Find the rival (0% compatibility)
