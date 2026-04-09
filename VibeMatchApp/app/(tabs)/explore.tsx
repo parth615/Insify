@@ -51,32 +51,82 @@ export default function ExploreScreen() {
 
   useEffect(() => {
     if (response?.type === 'success') {
-      const { access_token } = response.params;
-      completeWithSpotify(access_token);
+      // PKCE flow: expo-auth-session exchanges the code and puts the token in response.authentication
+      if (response.authentication?.accessToken) {
+        console.log('[Spotify] Got access token via expo-auth-session PKCE exchange');
+        completeWithSpotify(response.authentication.accessToken);
+      } else if (response.params?.code && request?.codeVerifier) {
+        // Fallback: manually exchange the code via our backend
+        console.log('[Spotify] Got auth code, exchanging via backend...');
+        exchangeCodeViaBackend(response.params.code, request.codeVerifier);
+      } else if (response.params?.access_token) {
+        // Implicit grant fallback (unlikely with PKCE but handling it)
+        console.log('[Spotify] Got access token via implicit grant');
+        completeWithSpotify(response.params.access_token);
+      } else {
+        setLoading(false);
+        setSyncError('Spotify auth succeeded but no token received. Check redirect URI config.');
+      }
     } else if (response?.type === 'error') {
       setLoading(false);
       setSyncError(response.error?.message || 'Unknown Spotify auth error');
+    } else if (response?.type === 'dismiss') {
+      setLoading(false);
     }
   }, [response]);
+
+  const exchangeCodeViaBackend = async (code: string, codeVerifier: string) => {
+    try {
+      const res = await axios.post(`${API_BASE_URL}/spotify/token-exchange`, {
+        code: code,
+        code_verifier: codeVerifier,
+        redirect_uri: redirectUri,
+      });
+      if (res.data.access_token) {
+        completeWithSpotify(res.data.access_token);
+      } else {
+        setLoading(false);
+        setSyncError('Token exchange failed — no access token in response.');
+      }
+    } catch (e: any) {
+      setLoading(false);
+      const detail = e.response?.data?.detail || e.message || 'Token exchange failed';
+      setSyncError(`Spotify token exchange failed: ${detail}`);
+    }
+  };
 
   const handleConnectSpotify = () => {
     setSyncError('');
     setLoading(true);
     promptAsync();
-    setTimeout(() => { setLoading(false); }, 10000);
   };
 
   const completeWithSpotify = async (token: string) => {
     try {
-      const spotRes = await axios.get('https://api.spotify.com/v1/me/top/artists', {
+      console.log('[Spotify] Fetching top artists...');
+      const spotRes = await axios.get('https://api.spotify.com/v1/me/top/artists?limit=20', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      const top_artists = spotRes.data.items.map((a: any) => a.name);
+      const top_artists = spotRes.data.items?.map((a: any) => a.name) || [];
 
-      const playRes = await axios.get('https://api.spotify.com/v1/me/playlists?limit=3', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const playlists = playRes.data.items.map((p: any) => p.name);
+      console.log(`[Spotify] Got ${top_artists.length} top artists`);
+      
+      let playlists: string[] = [];
+      try {
+        const playRes = await axios.get('https://api.spotify.com/v1/me/playlists?limit=5', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        playlists = playRes.data.items?.map((p: any) => p.name) || [];
+        console.log(`[Spotify] Got ${playlists.length} playlists`);
+      } catch (playErr) {
+        console.log('[Spotify] Could not fetch playlists, continuing with artists only');
+      }
+
+      if (top_artists.length === 0) {
+        setLoading(false);
+        setSyncError('No top artists found on your Spotify. Listen to more music and try again!');
+        return;
+      }
 
       await axios.post(`${API_BASE_URL}/update-playlists`, {
         name: currentUser,
@@ -85,11 +135,17 @@ export default function ExploreScreen() {
       });
 
       setLoading(false);
-      setSyncError("Success! Your Spotify playlists have been embedded in your profile.");
+      setSyncError(`Success! Synced ${top_artists.length} artists and ${playlists.length} playlists from Spotify.`);
       loadData();
     } catch (e: any) {
       setLoading(false);
-      setSyncError(e.message || "Error: Could not sync Spotify.");
+      if (e.response?.status === 403) {
+        setSyncError('Spotify API access denied. Make sure user-top-read scope is authorized.');
+      } else if (e.response?.status === 401) {
+        setSyncError('Spotify token expired. Please try syncing again.');
+      } else {
+        setSyncError(e.message || 'Error: Could not sync Spotify.');
+      }
     }
   };
 

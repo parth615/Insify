@@ -39,6 +39,8 @@ export default function App() {
   const [loginGender, setLoginGender] = useState('Male');
   const [loginPreference, setLoginPreference] = useState('Female');
   const [loginCalls, setLoginCalls] = useState('YES');
+  const [otpAutoFilled, setOtpAutoFilled] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   // Continuous wiggling animation for sticker elements
   const rotation = useSharedValue(-2);
@@ -73,19 +75,34 @@ export default function App() {
     transform: [{ scale: pulse.value }],
   }));
 
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
+
   const requestOtp = async () => {
     setAuthError('');
+    setOtpAutoFilled(false);
     if (!loginName || !loginPhone || !loginEmail) {
       setAuthError("Please fill in Name, Phone, and Email.");
       return;
     }
     setLoading(true);
     try {
-      await axios.post(`${API_BASE_URL}/request-otp`, {
+      const res = await axios.post(`${API_BASE_URL}/request-otp`, {
         phone: loginPhone,
         email: loginEmail
       });
       setCurrentStep('otp');
+      setResendCooldown(30);
+      // Auto-fill OTP from dev mode response
+      if (res.data.dev_otp) {
+        setLoginOtp(res.data.dev_otp);
+        setOtpAutoFilled(true);
+      }
     } catch (e: any) {
       setAuthError(e.response?.data?.detail || "Could not send OTP. Make sure backend is live.");
     } finally {
@@ -375,17 +392,25 @@ export default function App() {
 
         <View style={styles.otpContainer}>
           <Text style={styles.findingTitle}>ENTER OTP</Text>
-          <Text style={styles.findingSub}>We sent a simulated code to {loginPhone}</Text>
-          <Text style={styles.findingSub}>(Hint: Enter 1234)</Text>
+          <Text style={styles.findingSub}>Verification code sent to {loginEmail || loginPhone}</Text>
+
+          {otpAutoFilled && (
+            <View style={{ backgroundColor: '#1DB954', padding: 8, marginTop: 12, borderWidth: 3, borderColor: '#000', transform: [{rotate: '-1deg'}] }}>
+              <Text style={{ color: '#000', fontWeight: '900', fontSize: 13, textAlign: 'center' }}>✅ CODE AUTO-FILLED (DEV MODE)</Text>
+            </View>
+          )}
 
           <TextInput
-            style={[styles.inputField, { marginTop: 30, textAlign: 'center', fontSize: 32 }]}
-            placeholder="----"
+            style={[styles.inputField, { marginTop: 20, textAlign: 'center', fontSize: 32, letterSpacing: 12 }]}
+            placeholder="• • • •"
             placeholderTextColor="#666"
             keyboardType="number-pad"
             maxLength={4}
             value={loginOtp}
-            onChangeText={setLoginOtp}
+            onChangeText={(text) => {
+              setLoginOtp(text);
+              setOtpAutoFilled(false);
+            }}
           />
 
           {authError ? <Text style={{ color: '#FFF', backgroundColor: '#FF0000', padding: 8, marginVertical: 8, fontWeight: 'bold' }}>⚠️ {authError}</Text> : null}
@@ -398,6 +423,23 @@ export default function App() {
             {loading ? <ActivityIndicator color="#000" size="large" /> : (
               <Text style={styles.spotifyBtnText}>VERIFY & LOGIN →</Text>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.resendBtn, resendCooldown > 0 && styles.btnDisabled]}
+            onPress={requestOtp}
+            disabled={resendCooldown > 0 || loading}
+          >
+            <Text style={styles.resendBtnText}>
+              {resendCooldown > 0 ? `RESEND IN ${resendCooldown}s` : '🔄 RESEND OTP'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={{ marginTop: 16 }}
+            onPress={() => { setCurrentStep('landing'); setLoginOtp(''); setAuthError(''); setOtpAutoFilled(false); }}
+          >
+            <Text style={{ color: '#000', fontWeight: '900', fontSize: 14, textDecorationLine: 'underline' }}>← BACK TO LOGIN</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -566,7 +608,9 @@ const styles = StyleSheet.create({
   footerNote: { marginTop: 24, fontSize: 13, color: '#000', textAlign: 'center', fontWeight: '900', letterSpacing: 1, backgroundColor: '#FFF', padding: 8, borderWidth: 2, borderColor: '#000', transform: [{ rotate: '1deg' }] },
 
   inputField: { backgroundColor: '#FFF', paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, fontWeight: '800', borderWidth: 4, borderColor: '#000', marginBottom: 12, width: '100%', shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, transform: [{rotate: '-1deg'}], color: '#000' },
-  otpContainer: { backgroundColor: '#CCFF00', padding: 24, borderWidth: 6, borderColor: '#000', marginHorizontal: 20, marginTop: '20%', shadowColor: '#000', shadowOffset: { width: 10, height: 10 }, shadowOpacity: 1, shadowRadius: 0, transform: [{rotate: '2deg'}], alignItems: 'center' },
+  otpContainer: { backgroundColor: '#CCFF00', padding: 24, borderWidth: 6, borderColor: '#000', marginHorizontal: 20, marginTop: '15%', shadowColor: '#000', shadowOffset: { width: 10, height: 10 }, shadowOpacity: 1, shadowRadius: 0, transform: [{rotate: '2deg'}], alignItems: 'center' },
+  resendBtn: { marginTop: 16, backgroundColor: '#FFF', paddingVertical: 12, paddingHorizontal: 24, borderWidth: 4, borderColor: '#000', transform: [{rotate: '-1deg'}], shadowColor: '#000', shadowOffset: { width: 3, height: 3 }, shadowOpacity: 1, shadowRadius: 0 },
+  resendBtnText: { color: '#000', fontSize: 14, fontWeight: '900', letterSpacing: 1, textAlign: 'center' },
 
   pickerWrap: { width: '100%', marginBottom: 16, alignItems: 'flex-start' },
   pickerLabel: { color: '#000', fontSize: 14, fontWeight: '900', backgroundColor: '#FFF', paddingHorizontal: 6, borderWidth: 2, borderColor: '#000', marginBottom: 8, transform: [{rotate: '-2deg'}] },

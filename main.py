@@ -5,10 +5,18 @@ import json
 import math
 import random
 import os
+import time
+import requests as http_requests
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from matcher import get_most_compatible
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Dev mode: when True, OTP is returned in the response for auto-fill
+DEV_MODE = os.getenv("DEV_MODE", "true").lower() == "true"
 
 app = FastAPI(title="VibeMatch API")
 
@@ -217,9 +225,10 @@ def generate_aura(artists: list[str]) -> str:
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from twilio.rest import Client
 
+# OTP store with expiry: { identifier: { "code": str, "expires_at": float } }
 otp_store = {}
+OTP_EXPIRY_SECONDS = 300  # 5 minutes
 
 def send_email_otp(to_email: str, code: str):
     smtp_email = os.getenv("SMTP_EMAIL")
@@ -266,10 +275,11 @@ def send_sms_otp(to_phone: str, code: str):
     from_phone = os.getenv("TWILIO_PHONE_NUMBER")
     
     if not account_sid or not auth_token or not from_phone:
-        print(f"[Twilio Config Missing] Cannot send SMS to {to_phone}. Simulated OTP: {code}")
+        print(f"[Twilio Config Missing] Cannot send SMS to {to_phone}. OTP: {code}")
         return
         
     try:
+        from twilio.rest import Client
         if not to_phone.startswith("+"):
             to_phone = "+" + to_phone
             
@@ -288,38 +298,61 @@ def send_sms_otp(to_phone: str, code: str):
 @app.post("/request-otp")
 def request_otp(data: OTPRequest, background_tasks: BackgroundTasks):
     code = str(random.randint(1000, 9999))
-    print(f"Generated OTP {code} for phone: {data.phone}, email: {data.email}")
+    expires_at = time.time() + OTP_EXPIRY_SECONDS
+    print(f"\n{'='*50}")
+    print(f"🔑 Generated OTP: {code}")
+    print(f"   Phone: {data.phone}")
+    print(f"   Email: {data.email}")
+    print(f"   Expires in: {OTP_EXPIRY_SECONDS}s")
+    print(f"{'='*50}\n")
     
     if data.phone:
-        otp_store[data.phone] = code
+        otp_store[data.phone] = {"code": code, "expires_at": expires_at}
         background_tasks.add_task(send_sms_otp, data.phone, code)
     if data.email:
-        otp_store[data.email] = code
+        otp_store[data.email] = {"code": code, "expires_at": expires_at}
         background_tasks.add_task(send_email_otp, data.email, code)
+
+    response = {"status": "success", "message": "OTP sent!"}
+    
+    # In DEV_MODE, include the OTP in the response for auto-fill
+    if DEV_MODE:
+        response["dev_otp"] = code
+        response["message"] = "OTP generated (dev mode — auto-filled)"
         
-    return {"status": "success", "message": "OTP sent!"}
+    return response
 
 @app.post("/verify-otp")
 def verify_otp(data: OTPVerify):
-    actual_phone_otp = otp_store.get(data.phone)
-    actual_email_otp = otp_store.get(data.email)
+    phone_entry = otp_store.get(data.phone)
+    email_entry = otp_store.get(data.email)
     
     is_valid = False
     
-    # Check phone OTP
-    if actual_phone_otp and data.otp == actual_phone_otp:
-        is_valid = True
-        del otp_store[data.phone]
-    # Check email OTP 
-    elif actual_email_otp and data.otp == actual_email_otp:
-        is_valid = True
-        del otp_store[data.email]
-    # Universal backdoor for testing/demo
-    elif data.otp == "1234":
-        is_valid = True
+    # Check phone OTP (with expiry)
+    if phone_entry:
+        if time.time() > phone_entry["expires_at"]:
+            del otp_store[data.phone]
+        elif data.otp == phone_entry["code"]:
+            is_valid = True
+            del otp_store[data.phone]
+            # Also clean up email entry
+            if data.email in otp_store:
+                del otp_store[data.email]
+    
+    # Check email OTP (with expiry)
+    if not is_valid and email_entry:
+        if time.time() > email_entry["expires_at"]:
+            del otp_store[data.email]
+        elif data.otp == email_entry["code"]:
+            is_valid = True
+            del otp_store[data.email]
+            # Also clean up phone entry
+            if data.phone in otp_store:
+                del otp_store[data.phone]
         
     if not is_valid:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP. Please request a new one.")
         
     fallback_artists = ['Pritam', 'Arijit Singh', 'Ankit Tiwari', 'Taimour Baig', 'KK']
     aura = generate_aura(fallback_artists)
@@ -697,6 +730,51 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, client_id: str)
         if room_id in dj_rooms:
             dj_rooms[room_id]["listeners"] = max(0, dj_rooms[room_id]["listeners"] - 1)
         await manager.broadcast(room_id, {"type": "system", "text": f"{client_id} disconnected."})
+
+# --- Spotify Token Exchange ---
+
+class SpotifyTokenExchange(BaseModel):
+    code: str
+    code_verifier: str
+    redirect_uri: str
+
+@app.post("/spotify/token-exchange")
+def spotify_token_exchange(data: SpotifyTokenExchange):
+    """
+    Exchange a Spotify authorization code + PKCE code_verifier for an access token.
+    This is done server-side so the client_secret isn't exposed on the frontend.
+    """
+    client_id = os.getenv("SPOTIFY_CLIENT_ID", "26da15706e304db08c3b7ae991943759")
+    client_secret = os.getenv("SPOTIFY_CLIENT_SECRET", "")
+    
+    try:
+        token_response = http_requests.post(
+            "https://accounts.spotify.com/api/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": data.code,
+                "redirect_uri": data.redirect_uri,
+                "client_id": client_id,
+                "code_verifier": data.code_verifier,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        
+        if token_response.status_code != 200:
+            error_detail = token_response.json().get("error_description", "Token exchange failed")
+            print(f"[Spotify Token Exchange Failed] {token_response.status_code}: {error_detail}")
+            raise HTTPException(status_code=400, detail=error_detail)
+        
+        token_data = token_response.json()
+        print(f"[Spotify Token Exchange OK] Got access token for redirect_uri={data.redirect_uri}")
+        return {"status": "success", "access_token": token_data["access_token"]}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Spotify Token Exchange Error] {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # --- Static Frontend Serving ---
 dist_path = os.path.join(os.path.dirname(__file__), "VibeMatchApp", "dist")
