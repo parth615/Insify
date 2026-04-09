@@ -108,17 +108,44 @@ def send_otp_email(email: str, code: str) -> bool:
 
 def send_otp_sms(phone: str, code: str) -> bool:
     """
-    Send OTP via SMS using Twilio.
-    Requires these env vars:
+    Send OTP via SMS. Tries Fast2SMS first, then falls back to Twilio.
+    Requires either:
+      FAST2SMS_API_KEY
+      or
       TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
     Falls back to console logging if not configured.
     """
+    import requests
+    
+    fast_api_key = os.getenv("FAST2SMS_API_KEY")
+    
+    if fast_api_key:
+        try:
+            # Fast2SMS prefers just the 10-digit number
+            cleaned_phone = phone.replace("+91", "").replace("+", "").strip()
+            url = "https://www.fast2sms.com/dev/bulkV2"
+            querystring = {
+                "authorization": fast_api_key,
+                "variables_values": code,
+                "route": "otp",
+                "numbers": cleaned_phone
+            }
+            response = requests.request("GET", url, params=querystring)
+            if response.status_code == 200:
+                logger.info(f"[Fast2SMS OTP SENT] {phone}")
+                return True
+            else:
+                logger.warning(f"[Fast2SMS Failed] {response.text}")
+        except Exception as e:
+            logger.error(f"[Fast2SMS Exception] {e}")
+
+    # Fallback to Twilio
     account_sid = os.getenv("TWILIO_ACCOUNT_SID")
     auth_token = os.getenv("TWILIO_AUTH_TOKEN")
     twilio_phone = os.getenv("TWILIO_PHONE_NUMBER")
 
     if not all([account_sid, auth_token, twilio_phone]):
-        logger.warning(f"[SMS OTP FALLBACK] Twilio not configured. OTP for {phone}: {code}")
+        logger.warning(f"[SMS OTP FALLBACK] NO SMS API correctly configured. OTP for {phone}: {code}")
         print(f"\n{'='*50}")
         print(f"📱 SMS OTP for {phone}: {code}")
         print(f"{'='*50}\n")
@@ -136,10 +163,10 @@ def send_otp_sms(phone: str, code: str) -> bool:
             from_=twilio_phone,
             to=to_phone,
         )
-        logger.info(f"[SMS OTP SENT] {phone} -> SID: {message.sid}")
+        logger.info(f"[Twilio OTP SENT] {phone} -> SID: {message.sid}")
         return True
     except Exception as e:
-        logger.error(f"[SMS OTP FAILED] {phone}: {e}")
+        logger.error(f"[Twilio OTP FAILED] {phone}: {e}")
         print(f"\n📱 SMS OTP FALLBACK for {phone}: {code}\n")
         return True  # Don't block the flow
 

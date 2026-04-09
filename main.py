@@ -221,84 +221,13 @@ def generate_aura(artists: list[str]) -> str:
     else:
         return random.choice(["Mysterious Vibe 🔮", "Electric Soul ⚡", "Hyper-Pop Dreams 🦄"])
 
-# --- Real OTP Implementations ---
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-
-# OTP store with expiry: { identifier: { "code": str, "expires_at": float } }
-otp_store = {}
-OTP_EXPIRY_SECONDS = 300  # 5 minutes
-
-def send_email_otp(to_email: str, code: str):
-    smtp_email = os.getenv("SMTP_EMAIL")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    if not smtp_email or not smtp_password:
-        print(f"[SMTP Config Missing] Cannot send Email to {to_email}. Simulated OTP: {code}")
-        return
-        
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Your VibeMatch Registration Code 🎵"
-        msg["From"] = smtp_email
-        msg["To"] = to_email
-        
-        text = f"Your VibeMatch OTP is: {code}. Keep on vibrating!"
-        html = f"""\
-        <html>
-          <body style="background-color: #FF007F; padding: 24px; font-family: sans-serif; text-align: center;">
-            <div style="background-color: #CCFF00; padding: 32px; border: 6px solid #000; box-shadow: 8px 8px 0px #000; transform: rotate(-2deg); display: inline-block;">
-                <h1 style="color: #000; letter-spacing: 2px;">VIBEMATCH OTP</h1>
-                <p style="font-size: 24px; font-weight: bold; background: #FFF; border: 4px solid #000; padding: 12px;">{code}</p>
-                <p style="font-weight: 900;">NO SMALL TALK. JUST MUSIC.</p>
-            </div>
-          </body>
-        </html>
-        """
-        part1 = MIMEText(text, "plain")
-        part2 = MIMEText(html, "html")
-        msg.attach(part1)
-        msg.attach(part2)
-
-        server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
-        server.login(smtp_email, smtp_password)
-        server.sendmail(smtp_email, to_email, msg.as_string())
-        server.quit()
-        print(f"Sent email OTP to {to_email}")
-    except Exception as e:
-        print(f"Failed to send email OTP: {e}")
-
-def send_sms_otp(to_phone: str, code: str):
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-    from_phone = os.getenv("TWILIO_PHONE_NUMBER")
-    
-    if not account_sid or not auth_token or not from_phone:
-        print(f"[Twilio Config Missing] Cannot send SMS to {to_phone}. OTP: {code}")
-        return
-        
-    try:
-        from twilio.rest import Client
-        if not to_phone.startswith("+"):
-            to_phone = "+" + to_phone
-            
-        client = Client(account_sid, auth_token)
-        message = client.messages.create(
-            body=f"[VibeMatch] Your verification code is: {code} 🎧",
-            from_=from_phone,
-            to=to_phone
-        )
-        print(f"Sent SMS OTP to {to_phone}")
-    except Exception as e:
-        print(f"Failed to send SMS OTP: {e}")
+from otp_service import send_otp_sms, send_otp_email, store_otp, generate_otp, OTP_EXPIRY_SECONDS, verify_stored_otp
 
 # --- API Endpoints ---
 
 @app.post("/request-otp")
 def request_otp(data: OTPRequest, background_tasks: BackgroundTasks):
-    code = str(random.randint(1000, 9999))
-    expires_at = time.time() + OTP_EXPIRY_SECONDS
+    code = generate_otp()
     print(f"\n{'='*50}")
     print(f"🔑 Generated OTP: {code}")
     print(f"   Phone: {data.phone}")
@@ -307,11 +236,11 @@ def request_otp(data: OTPRequest, background_tasks: BackgroundTasks):
     print(f"{'='*50}\n")
     
     if data.phone:
-        otp_store[data.phone] = {"code": code, "expires_at": expires_at}
-        background_tasks.add_task(send_sms_otp, data.phone, code)
+        store_otp(data.phone, code)
+        background_tasks.add_task(send_otp_sms, data.phone, code)
     if data.email:
-        otp_store[data.email] = {"code": code, "expires_at": expires_at}
-        background_tasks.add_task(send_email_otp, data.email, code)
+        store_otp(data.email, code)
+        background_tasks.add_task(send_otp_email, data.email, code)
 
     response = {"status": "success", "message": "OTP sent!"}
     
@@ -324,32 +253,18 @@ def request_otp(data: OTPRequest, background_tasks: BackgroundTasks):
 
 @app.post("/verify-otp")
 def verify_otp(data: OTPVerify):
-    phone_entry = otp_store.get(data.phone)
-    email_entry = otp_store.get(data.email)
-    
     is_valid = False
     
-    # Check phone OTP (with expiry)
-    if phone_entry:
-        if time.time() > phone_entry["expires_at"]:
-            del otp_store[data.phone]
-        elif data.otp == phone_entry["code"]:
-            is_valid = True
-            del otp_store[data.phone]
-            # Also clean up email entry
-            if data.email in otp_store:
-                del otp_store[data.email]
-    
-    # Check email OTP (with expiry)
-    if not is_valid and email_entry:
-        if time.time() > email_entry["expires_at"]:
-            del otp_store[data.email]
-        elif data.otp == email_entry["code"]:
-            is_valid = True
-            del otp_store[data.email]
-            # Also clean up phone entry
-            if data.phone in otp_store:
-                del otp_store[data.phone]
+    # Check phone OTP
+    if data.phone and verify_stored_otp(data.phone, data.otp):
+        is_valid = True
+        # If valid, clear from email too in case they were linked temporarily
+        if data.email:
+            verify_stored_otp(data.email, data.otp) # this will clear it if matches
+            
+    # Check email OTP
+    elif data.email and verify_stored_otp(data.email, data.otp):
+        is_valid = True
         
     if not is_valid:
         raise HTTPException(status_code=400, detail="Invalid or expired OTP. Please request a new one.")
