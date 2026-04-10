@@ -121,23 +121,39 @@ def send_otp_sms(phone: str, code: str) -> bool:
     
     if fast_api_key:
         try:
-            # Fast2SMS prefers just the 10-digit number
-            cleaned_phone = phone.replace("+91", "").replace("+", "").strip()
+            # Fast2SMS needs just the 10-digit Indian number
+            cleaned_phone = phone.replace("+91", "").replace("+", "").replace(" ", "").strip()
+            # Remove any leading zeros
+            cleaned_phone = cleaned_phone.lstrip("0")
+            
             url = "https://www.fast2sms.com/dev/bulkV2"
-            querystring = {
+            headers = {
                 "authorization": fast_api_key,
+                "Content-Type": "application/json"
+            }
+            payload = {
                 "variables_values": code,
                 "route": "otp",
                 "numbers": cleaned_phone
             }
-            response = requests.request("GET", url, params=querystring)
-            if response.status_code == 200:
+            
+            print(f"\n[Fast2SMS] Sending OTP {code} to {cleaned_phone}...")
+            response = requests.get(url, headers=headers, params=payload, timeout=15)
+            resp_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+            
+            print(f"[Fast2SMS] Status: {response.status_code}")
+            print(f"[Fast2SMS] Response: {response.text}")
+            
+            if response.status_code == 200 and resp_data.get("return") == True:
                 logger.info(f"[Fast2SMS OTP SENT] {phone}")
+                print(f"[Fast2SMS] ✅ OTP sent successfully to {cleaned_phone}")
                 return True
             else:
-                logger.warning(f"[Fast2SMS Failed] {response.text}")
+                logger.warning(f"[Fast2SMS Failed] {response.status_code}: {response.text}")
+                print(f"[Fast2SMS] ❌ Failed: {response.text}")
         except Exception as e:
             logger.error(f"[Fast2SMS Exception] {e}")
+            print(f"[Fast2SMS] ❌ Exception: {e}")
 
     # Fallback to Twilio
     account_sid = os.getenv("TWILIO_ACCOUNT_SID")
